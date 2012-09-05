@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<script type="text/jscript" >
+        <!--
+        window.resizeTo(500, 450);    //  ウィンドウサイズ設定
+        window.moveTo(300, 200);      //  ウィンドウ移動
+
+        var fso = new ActiveXObject('Scripting.FileSystemObject');
+        if(!fso.FileExists('C:\\ATS\\XLS2CSV.VBS')){
+                alert('C\\ATSフォルダにXLS2CSV.VBSが無いので処理できません');
+        }
+        //-->
+</script>
+
+<html lang="ja">
+        <head>
+                <meta charset="Shift_JIS" />
+                <meta http-equiv="Content-Script-Type" content="text/javascript">
+                <title>Excel to CSV コンバーター</title>
+                <script src="http://code.jquery.com/jquery-1.6.2.min.js"></script>
+                <script>
+                        function SaveAsDialog(){
+                                var fsv = new ActiveXObject( "SAFRCFileDlg.FileSave" );
+                                var TextSavePath = document.getElementById("SaveFilePAth");
+                                //  初期表示のディレクトリパスを設定
+                                fsv.FileName = "C:\\temp.csv";
+
+                                //  ファイルタイプを設定
+                                fsv.FileType = "csv";
+
+                                //  ファイル保存ダイアログボックスを表示
+                                var rtn = fsv.OpenFileSaveDlg();
+                                //  キャンセルボタンを押されなかった時
+                                if( !rtn  ==  0 ) {
+                                        TextSavePath.value =  fsv.FileName ;
+                                }
+
+                                //  オブジェクトを解放
+                                fsv = null;
+                        }
+
+                        function CallXls2Csv(){
+                                var objwshell = new ActiveXObject("wscript.shell");
+                                var CommandString = "cscript C:\\ATS\\XLS2CSV.vbs "
+                                var XlsPath = document.getElementById("XlsPath");
+                                var FdfPath = document.getElementById("FdfPath");
+                                var StartRow = document.getElementById("StartRow");
+                                var SaveFilePAth = document.getElementById("SaveFilePAth");
+                                var LengthCheck = document.getElementById("LengthCheckBox");
+
+                                if (LengthCheck.checked) {
+                                        LengthCheckPara = " " + "Y";
+                                }
+                                else {
+                                        LengthCheckPara = " " + "F";
+                                }
+                                CommandString = CommandString + "\"" + XlsPath.value + "\" \"" + FdfPath.value + "\" " + StartRow.value + " \"" + SaveFilePAth.value + "\" " + LengthCheckPara;
+                                //alert (CommandString);
+                                copyText(CommandString);
+
+                                objwshell.run (CommandString), 1, true;
+                        }
+
+                        function copyText(CommandString) {
+                                clipboardData.setData("Text", CommandString);
+                                alert("文字列:" + CommandString + "をコピー");
+                        }
+                </script>
+        </head>
+        <body>
+                <form action="">
+                        <div>
+                                Excelファイル名<br>
+                                <input type = "file" id="XlsPath" style="margin:0px 0px 10px 0px;"  name="XlsFile">
+                        </div>
+                        <div>
+                                FDFファイル名<br>
+                                <input type = "file" id="FdfPath" style="margin:0px 0px 10px 0px;"  name="FdfFile">
+                        </div>
+                        <div>フィールドの桁数をチェックする<br>
+                                <input type="checkbox" id="LengthCheckBox" name="LengthCheck" value="1" checked>
+                        </div>
+                        <br>
+                        <div>
+                                変換対象データの開始行<br>
+                                <input type="text" size="5" id="StartRow" name="zip1" class="zip" value="1" />行目から変換(半角数字で入力)
+                        </div>
+                        <div>--------------------------------------------------------</div>
+                        <div align="right">
+                                ファイルの保存先<br>
+                                <input type="text1" id="SaveFilePAth" value="C:\temp.csv">
+                                <input type="BUTTON" id="text" name="SavePath" onClick="SaveAsDialog();" value="保存先">
+                        </div>
+                        <br><br><br>
+                        <div align="right">
+                                変換開始<br>
+                                <input type="BUTTON"  name="StartButton" onClick="CallXls2Csv();" value="開始">
+                        </div>
+
+
+                </form>
+                <script><!--
+                        jQuery('input.zip').keypress(function(event) {
+                                st = String.fromCharCode(event.which);
+                                if ("0123456789\b\r\t".indexOf(st,0) < 0) return false;
+                                return true;
+                        });
+                        //--></script>
+        </body>
+</html>
