@@ -60,8 +60,8 @@ sub ChkArgs(byref chkError)
                         chkError = True
                 End If
         end if
-        if gChkDigit <> "Y" and gChkDigit <> "F" then
-                MsgBox "Parameter 5th is incorrect." & vbcrlf & "Correct value is  'Y or F'",vbcritical
+        if gChkDigit <> "T" and gChkDigit <> "F" then
+                MsgBox "Parameter 5th is incorrect." & vbcrlf & "Correct value is  'T or F'",vbcritical
                 chkError = True
         end if
 
