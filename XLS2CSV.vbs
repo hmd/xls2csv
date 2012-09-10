@@ -143,7 +143,7 @@ Function ChkData(xlsString,byval sType,byval lenNumber,byval lenDecimal,gChkDigi
                 ChkData = True
                 exit Function
         elseif sType = "1" Then  'Character
-                if CalcByte(xlsString) > lenNumber and gChkDigit = "Y" then
+                if CalcByte(xlsString) > lenNumber and gChkDigit = "T" then
                         MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
                         ChkData = True
                         exit Function
@@ -154,7 +154,7 @@ Function ChkData(xlsString,byval sType,byval lenNumber,byval lenDecimal,gChkDigi
                                 MsgBox Row & "row " & clomun & "column" & "  is not numeric", vbCritical
                                 ChkData = True
                                 Exit Function
-                        elseif gChkDigit = "Y" then 
+                        elseif gChkDigit = "T" then 
                                 strKeta = split(xlsString,".")
                                 if lenDecimal > 0 then
                                         lenNumber = lenNumber - (2 + lenDecimal)
