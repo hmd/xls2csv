@@ -159,14 +159,14 @@ sub CreateCsv()
         xlsObject.Application.ScreenUpdating = False
         'Get xls data
         set xSh = xlsObject.Sheets(1)
+        On Error Resume Next
         With xSh.UsedRange
-                xlsEndRow = .Rows(.Rows.Count).Row
+                xlsEndRow = .Find("*", , -4123 , , 1 , 2).Row '.Find("*", , xlFormulas, , xlByRows, xlPrevious).Row
                 uploadText.SetMaxRow(xlsEndRow)
         end with
         xlsEndCol = UBound(gType)
         uploadText.SetMaxCol(xlsEndCol)
         'Check data row
-        On Error Resume Next
         if xlsEndRow  < cint(gStartRow)   Then
                 If Err.Number <> 0 Then
                         MsgBox (gXlsPath & " is  no data"),vbCritical
