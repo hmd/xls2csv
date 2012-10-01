@@ -2,9 +2,9 @@ option explicit
 
 Class UploadFile
 private m_MaxCol
-private m_NowCol
+private m_CurrentCol
 private m_MaxRow
-private m_NowRow
+private m_CurrentRow
 private m_TxtStream
 private adTypeBinary
 private adTypeText
@@ -24,25 +24,17 @@ Private Sub Class_Initialize
         uploadAdodbStream.Type = adTypeText
         uploadAdodbStream.Charset = "shift-jis"
         uploadAdodbStream.Open()
-        m_NowCol = 1
-        m_NowRow = 1
+        m_CurrentCol = 0
+        m_CurrentRow = 1
 End Sub
 
 public Function SetMaxCol(strCol)
-        m_MaxCol = strCol
+        m_MaxCol = strCol - 1
         ReDim Preserve m_TxtArray(m_MaxCol)
 End Function
 
 public Function SetMaxRow(strRow)
         m_MaxRow = strRow
-End Function
-
-public Function GetMaxRow()
-        GetMaxRow = m_MaxRow
-End Function
-
-public Function GetMaxCol()
-        GetMaxCol = m_MaxCol
 End Function
 
 Public Function SetData(strData,strType) 
@@ -58,16 +50,16 @@ Public Function SetData(strData,strType)
 end Function
 
 Public Function WriteText() 
-        m_TxtArray(m_NowCol) = m_TxtStream
-        if m_NowCol = m_MaxCol then
+        m_TxtArray(m_CurrentCol) = m_TxtStream
+        if m_CurrentCol = m_MaxCol then
                 uploadAdodbStream.WriteText(Join(m_TxtArray, ","))
-                if m_NowRow < m_MaxRow then
+                if m_CurrentRow < m_MaxRow then
                         uploadAdodbStream.WriteText(vbcrlf)
                 end if
-                m_NowCol = 1
-                m_NowRow = m_NowRow + 1
+                m_CurrentCol = 0
+                m_CurrentRow = m_CurrentRow + 1
         else
-                m_NowCol = m_NowCol + 1
+                m_CurrentCol = m_CurrentCol + 1
         end if
 end Function
 
@@ -77,10 +69,11 @@ Public sub Save(strFileName)
 end sub
 
 Private Sub Class_Terminate
+        set uploadAdodbStream = nothing
+        Set m_RegExp = nothing
 End Sub
 
 end Class
-
 
 '----------------------------------------------------------------------------------------------------
 Dim gType()
@@ -90,9 +83,9 @@ Dim args
 dim gXlsPath 
 dim gFdfPath 
 dim gDataPath
-dim gStartLine
-dim gChkDigit
-dim chkError
+dim gStartRow
+dim gChkLength
+dim ArgErrExists
 Dim objRE : Set objRE = CreateObject("VBScript.RegExp")
 Dim objStr : set objStr =  CreateObject("ADODB.Stream")
 Dim FSO : Set FSO = CreateObject("Scripting.FileSystemObject")
@@ -105,33 +98,32 @@ Else
         gXlsPath = args.Item(0)
         gFdfPath = args.Item(1)
         gDataPath = args.Item(3)
-        gStartLine = args.Item(2)
-        gChkDigit = args.Item(4)
+        gStartRow = args.Item(2)
+        gChkLength = args.Item(4)
 End If
-call ChkArgs(chkError)
-If chkError then
-        WScript.Quit 10
-else
-        Call CrtData()
+call ChkArgs(ArgErrExists)
+If ArgErrExists = False then
+        Call CreateCsv()
 end if
 set objRE = nothing
 set objStr = nothing
+set FSO = nothing
 WScript.Quit 10
 '------------------------------------------------------------------------------------------------------
-sub ChkArgs(byref chkError)
+sub ChkArgs(byref ArgErrExists)
         dim FolderName
-        If FSO.FileExists(gXlsPath) = False Then
-                MsgBox gXlsPath & " is nothing", vbCritical
-                chkError = True
+        If FSO.FileExists(gXlsPath) Then
+                if Chkfiletype(gXlsPath,"xls")  then ArgErrExists = true
         else
-                if Chkfiletype(gXlsPath,"xls")  then chkError = true
+                MsgBox gXlsPath & " is nothing", vbCritical
+                ArgErrExists = True
         End If
 
-        If FSO.FileExists(gFdfPath) = False Then
-                MsgBox gFdfPath & " is nothing", vbCritical
-                chkError = True
+        If FSO.FileExists(gFdfPath) Then
+                if Chkfiletype(gFdfPath,"fdf") then ArgErrExists = true
         else
-                if Chkfiletype(gFdfPath,"fdf") then chkError = true
+                MsgBox gFdfPath & " is nothing", vbCritical
+                ArgErrExists = True
         End If
 
         If gDataPath = Empty Then 
@@ -142,207 +134,221 @@ sub ChkArgs(byref chkError)
                 FolderName = Replace(gDataPath, FSO.getfilename(gDataPath), "")
                 If FSO.FolderExists(FolderName) = False Then
                         MsgBox FolderName & "is nothing",vbcritical
-                        chkError = True
+                        ArgErrExists = True
                 End If
         end if
-        if gChkDigit <> "T" and gChkDigit <> "F" then
+        if gChkLength <> "T" and gChkLength <> "F" then
                 MsgBox "Parameter 5th is incorrect." & vbcrlf & "Correct value is  'T or F'",vbcritical
-                chkError = True
+                ArgErrExists = True
         end if
 
         If FSO.FileExists(gDataPath) Then FSO.DeleteFile (gDataPath)
 end sub
-                        '------------------------------------------------------------------------------------------------------
-                        sub CrtData()
-                                Dim xSh
-                                Dim t,c
-                                Dim oBxl : Set oBxl = CreateObject("Excel.Application")
-                                Dim uploadText : Set uploadText = new UploadFile
-                                Dim wrkResult
-                                'Get FDF info
-                                call GetFdfinfo(gFdfPath,gType,gLength,gDecimal)
-                                'Get xls data
-                                oBxl.Visible = False
-                                oBxl.Workbooks.Open gXlsPath
-                                set xSh = oBxl.ActiveWorkbook.ActiveSheet
-                                With xSh.UsedRange
-                                        uploadText.SetMaxRow(.Rows(.Rows.Count).Row)
-                                end with
-                                uploadText.SetMaxCol(UBound(gType))
-                                'oBxl.Quit
-                                'Check data row
-                                On Error Resume Next
-                                if uploadText.GetMaxRow < cint(gStartLine)   Then
+'------------------------------------------------------------------------------------------------------
+sub CreateCsv()
+        Dim xSh
+        Dim t,c
+        Dim uploadText : Set uploadText = new UploadFile
+        Dim wrkResult
+        Dim xlsObject
+        Dim xlsEndRow,xlsEndCol
+        Dim StrXlsStream
+        'Get FDF info
+        call GetFdfinfo(gFdfPath,gType,gLength,gDecimal)
+        Set xlsObject = WScript.GetObject(gXlsPath, "Excel.Sheet")
+        xlsObject.Application.ScreenUpdating = False
+        'Get xls data
+        set xSh = xlsObject.Sheets(1)
+        With xSh.UsedRange
+                xlsEndRow = .Rows(.Rows.Count).Row
+                uploadText.SetMaxRow(xlsEndRow)
+        end with
+        xlsEndCol = UBound(gType)
+        uploadText.SetMaxCol(xlsEndCol)
+        'Check data row
+        On Error Resume Next
+        if xlsEndRow  < cint(gStartRow)   Then
+                If Err.Number <> 0 Then
+                        MsgBox (gXlsPath & " is  no data"),vbCritical
+                else 
+                        MsgBox(gXlsPath & " is no data" & vbcr & "after " & gStartRow & " lines"),vbCritical
+                end if
+        Else
+                'Start exchanging
+                For t = gStartRow To xlsEndRow 
+                        StrXlsStream = xSh.Range(xSh.Cells(t,1),xSh.Cells(t,xlsEndCol)).value
+                        For c = 1 To xlsEndCol
+                                if ChkXlsData(StrXlsStream(1,c), gType(c),gLength(c),gDecimal(c),gChkLength,t,c) then
                                         If Err.Number <> 0 Then
-                                                MsgBox (gXlsPath & " is  no data"),vbCritical
-                                        else 
-                                                MsgBox(gXlsPath & " is no data" & vbcr & "after " & gStartLine & " lines"),vbCritical
+                                                MsgBox t & "row " & c & "column" & "  has Error data", vbCritical
                                         end if
-                                        On Error Goto 0
-                                Else
-                                        On Error Goto 0
-
-                                        'Start exchanging
-                                        For t = gStartLine To uploadText.GetMaxRow
-                                                For c = 1 To UBound(gType)
-                                                        On Error Resume Next
-                                                        if ChkData(xSh.Cells(t, c), gType(c),gLength(c),gDecimal(c),gChkDigit,t,c) then
-                                                                If Err.Number <> 0 Then
-                                                                        MsgBox t & "row " & c & "column" & "  has Error data", vbCritical
-                                                                        tf.Close
-                                                                        FSO.DeleteFile gDataPath
-                                                                        WScript.Quit 10
-                                                                end if
-                                                                tf.Close
-                                                                FSO.DeleteFile gDataPath
-                                                                WScript.Quit 10
-                                                        else
-                                                                'VBScriptは引数が2つ以上あるかつ、引数に括弧が使用されている場合
-                                                                '戻り値を設定しないとエラーになる仕様
-                                                                wrkReslt = uploadText.SetData(xSh.Cells(t, c), gType(c))
-                                                                uploadText.WriteText()
-                                                        End If
-                                                        On Error Goto 0
-                                                Next
-                                        Next 
-                                        uploadText.Save(gDataPath)
-                                        'If Err.Number <> 0 Then
-                                        '        msgbox "Failed to save file", vbcritical
-                                        'End If
+                                        xlsObject.Application.ScreenUpdating = True
+                                        xlsObject.Close
+                                        set xlsObject = nothing
+                                        set uploadText = nothing
+                                        Exit sub
+                                else
+                                        'VBScriptは引数が2つ以上あるかつ、引数に括弧が使用されている場合
+                                        '戻り値を設定しないとエラーになる仕様
+                                        wrkResult = uploadText.SetData(StrXlsStream(1,c), gType(c))
+                                        uploadText.WriteText()
                                 End If
-                        end sub
-                        '------------------------------------------------------------------------------------------------------
-                        'Check data type function
-                        Function ChkData(xlsString,byval sType,byval lenNumber,byval lenDecimal,gChkDigit,Row,clomun)
-                                if InStr( xlsString, vbCrLf ) or _
-                                        InStr( xlsString, vbCr ) or _   
-                                        InStr( xlsString, vbLf )  then
-                                        MsgBox Row & "row " & clomun & "column" & "  has line break", vbCritical
-                                        ChkData = True
-                                        exit Function
-                                elseif sType = "1" Then  'Character
-                                        if CalcByte(xlsString) > lenNumber and gChkDigit = "T" then
+                        Next
+                Next 
+                uploadText.Save(gDataPath)
+        End If
+        xlsObject.Application.ScreenUpdating = True
+        xlsObject.Close
+        set xlsObject = nothing
+        set uploadText = nothing
+        On Error Goto 0
+end sub
+'------------------------------------------------------------------------------------------------------
+'Check data type function
+Function ChkXlsData(xlsString,byval sType,byval lenNumber,byval lenDecimal,gChkLength,Row,clomun)
+        Dim strKeta
+        objRE.Pattern = "(\n|\r)"
+        if objRE.test(xlsString) then
+                MsgBox Row & "row " & clomun & "column" & "  has line break", vbCritical
+                ChkXlsData = True
+                exit Function
+        elseif sType = "1" Then  'Character
+                if CalcByte(xlsString) > lenNumber and gChkLength = "T" then
+                        MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
+                        ChkXlsData = True
+                        exit Function
+                end if
+        elseif sType = "2" Then 'Numeric
+                If xlsString <> "" then 
+                        if  vartype(xlsString) > 5 Then
+                                MsgBox Row & "row " & clomun & "column" & "  is not numeric", vbCritical
+                                ChkXlsData = True
+                                Exit Function
+                        elseif gChkLength = "T" then 
+                                strKeta = split(Cstr(xlsString),".")
+                                if ubound(strKeta) = 1 then 
+                                        if CalcByte(strketa(0)) > lenNumber or _
+                                                CalcByte(strketa(1)) > lenDecimal then
                                                 MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
-                                                ChkData = True
+                                                ChkXlsData = True
                                                 exit Function
                                         end if
-                                elseif sType = "2" Then 'Numeric
-                                        If xlsString <> "" then 
-                                                if  vartype(xlsString) > 5 Then
-                                                        MsgBox Row & "row " & clomun & "column" & "  is not numeric", vbCritical
-                                                        ChkData = True
-                                                        Exit Function
-                                                elseif gChkDigit = "T" then 
-                                                        strKeta = split(xlsString,".")
-                                                        if lenDecimal > 0 then
-                                                                lenNumber = lenNumber - (2 + lenDecimal)
-                                                        else
-                                                                lenNumber = lenNumber - 1
-                                                        end if
-                                                        if ubound(strKeta) = 1 then 
-                                                                if CalcByte(strketa(0)) > lenNumber or _
-                                                                        CalcByte(strketa(1)) > lenDecimal then
-                                                                        MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
-                                                                        ChkData = True
-                                                                        exit Function
-                                                                end if
-                                                        else
-                                                                if CalcByte(strketa(0)) > lenNumber then
-                                                                        MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
-                                                                        ChkData = True
-                                                                        exit Function
-                                                                end if
-                                                        end if
-                                                End If
-                                        End If
-                                End If
-                        End Function
-                        '------------------------------------------------------------------------------------------------------
-                        'Check file type
-                        Function Chkfiletype(Path,fileType) 
-                                If lcase(FSO.GetExtensionName(Path)) <> fileType Then
-                                        MsgBox Path & " is not " & fileType & " file",vbcritical
-                                        Chkfiletype = True
-                                End If
-                        end Function
-                        '------------------------------------------------------------------------------------------------------
-                        'Get fdf information
-                        Function GetFdfinfo(gFdfPath,byref gType,byref gLength,byref gDecimal) 
-                                Dim objInFile : Set objInFile = FSO.OpenTextFile(gFdfPath, 1)
-                                Dim strString 
-                                Dim fdfAry 
-                                Dim slashPosition 
-                                Dim shousu
-                                Dim seisu
-                                Dim j,i
-                                With objStr
-                                        .Open
-                                        .Charset = "_autodetect_all"
-                                        .LoadFromFile(gFdfPath)
-                                        fdfAry = split(.ReadText,vbcrlf)
-                                        .close
-                                End With
-                                for j =3 to ubound(fdfAry)
-                                        strString = Split(fdfAry(j), " ")
-                                        objRE.Pattern = "^P"
-                                        if objRE.Test(fdfAry(j)) then 
-                                                if  UBound(strString) = 3 then
-                                                        'P-Comm
-                                                        i = i + 1
-                                                        ReDim Preserve gType(i)
-                                                        ReDim Preserve gLength(i)
-                                                        ReDim Preserve gDecimal(i)
-                                                        slashPosition = InStrRev(strString(3), "/")
-                                                        if slashPosition > 0 then
-                                                                shousu = Mid(strString(3), slashPosition + 1)
-                                                                seisu = Mid(strString(3),1, slashPosition - 1)
-                                                        else
-                                                                shousu = 0
-                                                                seisu = strString(3)
-                                                        end if
-
-                                                        gType(i) = cint(strString(2)) 'data type
-                                                        gLength(i) = cint(seisu) 'Length
-                                                        gDecimal(i) = cint(shousu) 'Length
-                                                end if
-                                        else
-                                                'Client Acess
-                                                objRE.Pattern = "^Length*"
-                                                if objRE.Test(fdfAry(j)) then
-                                                        i = i + 1
-                                                        ReDim Preserve gType(i)
-                                                        ReDim Preserve gLength(i)
-                                                        ReDim Preserve gDecimal(i)
-                                                        gLength(i) = cint(replace(fdfAry(j),"Length=","")) 
-                                                else
-                                                        objRE.Pattern = "^Scale=*"
-                                                        if objRE.Test(fdfAry(j)) then
-                                                                gDecimal(i) = cint(replace(fdfAry(j),"Scale=","")) '
-                                                        else
-                                                                objRE.Pattern = "^Type=*"
-                                                                if objRE.Test(fdfAry(j)) then
-                                                                        gType(i) = cint(replace(fdfAry(j),"Type=","")) '
-                                                                end if
-                                                        end if
-                                                end if
+                                else
+                                        if CalcByte(strketa(0)) > lenNumber then
+                                                MsgBox Row & "row " & clomun & "column" & "  is overflow", vbCritical
+                                                ChkXlsData = True
+                                                exit Function
                                         end if
-                                next
-                                objInFile.Close
-                                set objInfile = nothing
-                        end Function
-                        '-------------------------------------------------------------------------------------------------------------------
-                        Function CalcByte(ByVal a)
-                                Dim c
-                                c = 0
-                                Dim i
-                                For i = 0 To Len(a) - 1
-                                        Dim k
-                                        k = Mid(a, i + 1, 1)
-                                        If (Asc(k) And &HFF00) = 0 Then
-                                                c = c + 1
-                                        Else
-                                                c = c + 2
-                                        End If
-                                Next
-                                CalcByte = c
-                        End Function
+                                end if
+                        End If
+                End If
+        End If
+End Function
+'------------------------------------------------------------------------------------------------------
+'Check file type
+Function Chkfiletype(Path,fileType) 
+        If lcase(FSO.GetExtensionName(Path)) <> fileType Then
+                MsgBox Path & " is not " & fileType & " file",vbcritical
+                Chkfiletype = True
+        End If
+end Function
+'------------------------------------------------------------------------------------------------------
+'Get fdf information
+Function GetFdfinfo(gFdfPath,byref gType,byref gLength,byref gDecimal) 
+        Dim objInFile : Set objInFile = FSO.OpenTextFile(gFdfPath, 1)
+        Dim strString
+        Dim fdfAry
+        Dim slashPosition
+        Dim shousu
+        Dim seisu
+        Dim j,i
+        With objStr
+                .Open
+                .Charset = "_autodetect_all"
+                .LoadFromFile(gFdfPath)
+                fdfAry = split(.ReadText,vbcrlf)
+                .close
+        End With
+        for j =3 to ubound(fdfAry)
+                strString = Split(fdfAry(j), " ")
+                objRE.Pattern = "^P"
+                if objRE.Test(fdfAry(j)) then 
+                        if  UBound(strString) = 3 then
+                                'P-Comm
+                                i = i + 1
+                                ReDim Preserve gType(i)
+                                ReDim Preserve gLength(i)
+                                ReDim Preserve gDecimal(i)
+                                slashPosition = InStrRev(strString(3), "/")
+                                if strString(2) = 1 then 'String type
+                                        shousu = 0
+                                        seisu = strString(3)
+                                else 'Numeric type
+                                        if slashPosition > 0 then
+                                                shousu = Mid(strString(3), slashPosition + 1)
+                                                seisu = Mid(strString(3),1, slashPosition - 1) - (shousu + 2)
+                                        else
+                                                shousu = 0
+                                                seisu = strString(3) - 1
+                                        end if
+                                end if
+                                gType(i) = cint(strString(2)) 'data type
+                                gLength(i) = cint(seisu) 'Length
+                                gDecimal(i) = cint(shousu) 'Length
+                        end if
+                else
+                        'Client Acess
+                        objRE.Pattern = "^Length=*"
+                        if objRE.Test(fdfAry(j)) then
+                                i = i + 1
+                                ReDim Preserve gType(i)
+                                ReDim Preserve gLength(i)
+                                ReDim Preserve gDecimal(i)
+                                gLength(i) = cint(replace(fdfAry(j),"Length=",""))
+                        else
+                                objRE.Pattern = "^Scale=*"
+                                if objRE.Test(fdfAry(j)) then
+                                        gDecimal(i) = cint(replace(fdfAry(j),"Scale=","")) '
+                                        gLength(i) = gLength(i) - (2 + gDecimal(i))
+                                else
+                                        objRE.Pattern = "^Type=*"
+                                        if objRE.Test(fdfAry(j)) then
+                                                gType(i) = cint(replace(fdfAry(j),"Type=","")) '
+                                        end if
+                                end if
+                        end if
+                end if
+        next
+        objInFile.Close
+        set objInfile = nothing
+end Function
+'-------------------------------------------------------------------------------------------------------------------
+Function CalcByte(TargetStream)
+        Dim i, cnt
+        Dim StringType
+        Dim DBCSSV
+        cnt = 0
+        For i = 1 To Len(TargetStream)
+                StringType = Asc(Mid(TargetStream, i, 1))
+                If (0 < StringType And StringType < 255) Then
+                        '0f　漢字の終了
+                        If (DBCSSV = 1) Then
+                                cnt = cnt + 1
+                        End If
+                        cnt = cnt + 1
+                        DBCSSV = 0
+
+                Else
+                        '0e 漢字の開始
+                        If (DBCSSV = 0) Then
+                                cnt = cnt + 1
+                        End If
+                        DBCSSV = 1
+                        cnt = cnt + 2
+                End If
+        Next
+        If (DBCSSV >= 1) Then
+                cnt = cnt + 1
+        End If
+        CalcByte = cnt
+End Function
