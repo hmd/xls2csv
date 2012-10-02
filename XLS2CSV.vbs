@@ -14,7 +14,6 @@ private m_RegExp
 private m_TxtArray()
 
 Private Sub Class_Initialize
-        ' ADODB.Streamのモード
         set uploadAdodbStream = CreateObject("ADODB.Stream")
         Set m_RegExp = CreateObject("VBScript.RegExp")
         m_RegExp.Pattern = """"
@@ -341,7 +340,7 @@ Function CalcByte(TargetStream)
         For i = 1 To Len(TargetStream)
                 StringType = Asc(Mid(TargetStream, i, 1))
                 If (0 < StringType And StringType < 255) Then
-                        '0f　漢字の終了
+                        'End DBCS
                         If (DBCSSV = 1) Then
                                 cnt = cnt + 1
                         End If
@@ -349,7 +348,7 @@ Function CalcByte(TargetStream)
                         DBCSSV = 0
 
                 Else
-                        '0e 漢字の開始
+                        'Start DBCS
                         If (DBCSSV = 0) Then
                                 cnt = cnt + 1
                         End If
