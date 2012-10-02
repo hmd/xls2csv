@@ -147,12 +147,12 @@ end sub
 '------------------------------------------------------------------------------------------------------
 sub CreateCsv()
         Dim xSh
-        Dim t,c
+        Dim t,c,j
         Dim uploadText : Set uploadText = new UploadFile
         Dim wrkResult
         Dim xlsObject
         Dim xlsEndRow,xlsEndCol
-        Dim StrXlsStream
+        Dim StrXlsAry
         'Get FDF info
         call GetFdfinfo(gFdfPath,gType,gLength,gDecimal)
         Set xlsObject = WScript.GetObject(gXlsPath, "Excel.Sheet")
@@ -175,26 +175,36 @@ sub CreateCsv()
                 end if
         Else
                 'Start exchanging
-                For t = gStartRow To xlsEndRow 
-                        StrXlsStream = xSh.Range(xSh.Cells(t,1),xSh.Cells(t,xlsEndCol)).value
-                        For c = 1 To xlsEndCol
-                                if ChkXlsData(StrXlsStream(1,c), gType(c),gLength(c),gDecimal(c),gChkLength,t,c) then
-                                        If Err.Number <> 0 Then
-                                                MsgBox t & "row " & c & "column" & "  has Error data", vbCritical
-                                        end if
-                                        xlsObject.Application.ScreenUpdating = True
-                                        xlsObject.Close
-                                        set xlsObject = nothing
-                                        set uploadText = nothing
-                                        Exit sub
-                                else
-                                        'VBScriptは引数が2つ以上あるかつ、引数に括弧が使用されている場合
-                                        '戻り値を設定しないとエラーになる仕様
-                                        wrkResult = uploadText.SetData(StrXlsStream(1,c), gType(c))
-                                        uploadText.WriteText()
-                                End If
+                t = cint(gStartRow)
+                Do while t < xlsEndRow
+                        if t + 200 < xlsEndRow then
+                                StrXlsAry = xSh.Range(xSh.Cells(t,1),xSh.Cells(t + 200 ,xlsEndCol)).value
+                                t = t + 201
+                        else 
+                                StrXlsAry = xSh.Range(xSh.Cells(t,1),xSh.Cells(xlsEndRow  ,xlsEndCol)).value
+                                t = xlsEndRow
+                        end if
+
+                        For j = 1 To Ubound(StrXlsAry)
+                                For c = 1 To xlsEndCol
+                                        if ChkXlsData(StrXlsAry(j,c), gType(c),gLength(c),gDecimal(c),gChkLength,t,c) then
+                                                If Err.Number <> 0 Then
+                                                        MsgBox t & "row " & c & "column" & "  has Error data", vbCritical
+                                                end if
+                                                xlsObject.Application.ScreenUpdating = True
+                                                xlsObject.Close
+                                                set xlsObject = nothing
+                                                set uploadText = nothing
+                                                Exit sub
+                                        else
+                                                'VBScriptは引数が2つ以上あるかつ、引数に括弧が使用されている場合
+                                                '戻り値を設定しないとエラーになる仕様
+                                                wrkResult = uploadText.SetData(StrXlsAry(j,c), gType(c))
+                                                uploadText.WriteText()
+                                        End If
+                                Next
                         Next
-                Next 
+                Loop 
                 uploadText.Save(gDataPath)
         End If
         xlsObject.Application.ScreenUpdating = True
